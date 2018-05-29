@@ -35,10 +35,10 @@ module.exports = {
 function createFieldConfig (Type, field, resolveFn) {
   return {
     type: Type,
-    resolve: (entity, _, ctx) => {
+    resolve: (entity, _, ctx, info) => {
       const fieldValue = _get(entity, ['fields', field.id], NOTHING);
       if (fieldValue !== NOTHING) {
-        return resolveFn ? resolveFn(fieldValue, ctx) : fieldValue;
+        return resolveFn ? resolveFn(fieldValue, ctx, info) : fieldValue;
       }
     }
   };
@@ -72,10 +72,10 @@ function getAsset (link, ctx) {
 }
 
 function createEntryFieldConfig (field, ctIdToType) {
-  return createFieldConfig(typeFor(field, ctIdToType), field, (link, ctx) => {
+  return createFieldConfig(typeFor(field, ctIdToType), field, (link, ctx, info) => {
     const linkedId = getLinkedId(link);
     if (isString(linkedId)) {
-      return ctx.entryLoader.get(linkedId, field.linkedCts && field.linkedCts[0]);
+      return ctx.entryLoader.get(linkedId, field.linkedCts && field.linkedCts[0], info);
     }
   });
 }

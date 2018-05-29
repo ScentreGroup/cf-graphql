@@ -4,6 +4,7 @@ const _get = require('lodash.get');
 const chunk = require('lodash.chunk');
 const qs = require('querystring');
 const DataLoader = require('dataloader');
+const graphqlFields = require('graphql-fields');
 
 const INCLUDE_DEPTH = 1;
 const CHUNK_SIZE = 70;
@@ -11,8 +12,22 @@ const CHUNK_SIZE = 70;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 1000;
 const FORBIDDEN_QUERY_PARAMS = ['skip', 'limit', 'include', 'content_type', 'locale'];
+const MAX_FIELDS = 50
 
 module.exports = createEntryLoader;
+
+const getSelectedFields = info => {
+  if (!info) {
+    return null;
+  }
+  const topLevelFields = Object.keys(graphqlFields(info)).filter(key => key !== 'sys');
+  if (topLevelFields.length > MAX_FIELDS) {
+    // There is a limit to the number of fields we can select. If too many get everything
+    return null;
+  }
+  const contentfulFields = topLevelFields.map(fieldKey => `fields.${fieldKey}`).join(',')
+  return `sys,${contentfulFields}`
+}
 
 function createEntryLoader (http) {
   const loader = new DataLoader(load);
@@ -21,7 +36,7 @@ function createEntryLoader (http) {
   return {
     get: getOne,
     getMany: loader.loadMany.bind(loader),
-    query: (ctId, args) => query(ctId, args).then(res => res.items),
+    query: (ctId, args, info) => query(ctId, args, info).then(res => res.items),
     count: (ctId, args) => query(ctId, args).then(res => res.total),
     queryAll,
     getIncludedAsset: id => assets[id],
@@ -48,7 +63,8 @@ function createEntryLoader (http) {
     .then(byId => ids.map(id => byId[id]));
   }
 
-  function getOne (id, forcedCtId) {
+  function getOne (id, forcedCtId, info) {
+    console.log('getOne', id, info && graphqlFields(info))
     return loader.load(id)
     .then(res => {
       const ctId = _get(res, ['sys', 'contentType', 'sys', 'id']);
@@ -60,7 +76,8 @@ function createEntryLoader (http) {
     });
   }
 
-  function query (ctId, {q = '', skip = 0, limit = DEFAULT_LIMIT} = {}) {
+  function query (ctId, {q = '', skip = 0, limit = DEFAULT_LIMIT} = {}, info) {
+    console.log('query', ctId, info && graphqlFields(info))
     const parsed = qs.parse(q);
     Object.keys(parsed).forEach(key => {
       if (FORBIDDEN_QUERY_PARAMS.includes(key)) {
@@ -75,6 +92,10 @@ function createEntryLoader (http) {
       content_type: ctId
     }, parsed);
 
+    const selectedFields = getSelectedFields(info)
+    if (selectedFields) {
+      params.select = selectedFields
+    }
     return http.get('/entries', params).then(prime);
   }
 

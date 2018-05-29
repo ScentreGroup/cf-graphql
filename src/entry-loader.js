@@ -21,7 +21,7 @@ const getSelectedFields = info => {
     return null;
   }
   const topLevelFields = Object.keys(graphqlFields(info)).filter(key => key !== 'sys');
-  if (topLevelFields.length > MAX_FIELDS) {
+  if (topLevelFields.length < 1 || topLevelFields.length > MAX_FIELDS) {
     // There is a limit to the number of fields we can select. If too many get everything
     return null;
   }

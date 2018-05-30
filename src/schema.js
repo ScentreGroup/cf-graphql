@@ -76,10 +76,10 @@ function createQueryFields (spaceGraph) {
         ids: {type: new GraphQLList(IDType)},
       },
       resolve: (_, args, ctx, info) => {
-        const { ids } = args;
+        const {ids} = args;
         if (ids) {
           return ctx.entryLoader.getMany(ids, info)
-          .then(objs => objs.filter(obj => obj && obj.sys.contentType.sys.id === ct.id));
+          .then(objs => objs.filter(obj => obj && obj.sys.contentType.sys.id === ct.id))
         } else {
           return ctx.entryLoader.query(ct.id, args, info);
         }

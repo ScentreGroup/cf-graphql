@@ -72,10 +72,10 @@ function getAsset (link, ctx) {
 }
 
 function createEntryFieldConfig (field, ctIdToType) {
-  return createFieldConfig(typeFor(field, ctIdToType), field, (link, ctx, info) => {
+  return createFieldConfig(typeFor(field, ctIdToType), field, (link, ctx) => {
     const linkedId = getLinkedId(link);
     if (isString(linkedId)) {
-      return ctx.entryLoader.get(linkedId, field.linkedCts && field.linkedCts[0], info);
+      return ctx.entryLoader.get(linkedId, field.linkedCts && field.linkedCts[0]);
     }
   });
 }

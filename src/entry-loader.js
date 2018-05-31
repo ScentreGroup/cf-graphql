@@ -39,7 +39,7 @@ function createEntryLoader (http) {
 
   return {
     get: getOne,
-    getMany: loader.loadMany.bind(loader),
+    getMany,
     query: (ctId, args, info) => query(ctId, args, info).then(res => res.items),
     count: (ctId, args) => query(ctId, args).then(res => res.total),
     queryAll,
@@ -47,24 +47,40 @@ function createEntryLoader (http) {
     getTimeline: () => http.timeline
   };
 
-  function load (ids) {
+  function load (idsInfo) {
     // we need to chunk IDs and fire multiple requests so we don't produce URLs
     // that are too long (for the server to handle)
-    const requests = chunk(ids, CHUNK_SIZE)
-    .map(ids => http.get('/entries', {
-      limit: CHUNK_SIZE,
-      skip: 0,
-      include: INCLUDE_DEPTH,
-      'sys.id[in]': ids.join(',')
-    }));
+    console.log('load', idsInfo)
+    const contentType = idsInfo[0].split('&&')[1]
+    const selectedFields = idsInfo[0].split('&&')[2]
+    console.log(selectedFields)
+    const allIds = idsInfo.map(idInfo => idInfo.split('&&')[0])
+    const requests = chunk(allIds, CHUNK_SIZE)
+    .map(ids => {
+      console.log('chunk ids', ids);
+      const params = {
+        limit: CHUNK_SIZE,
+        skip: 0,
+        include: INCLUDE_DEPTH,
+        'sys.id[in]': ids.join(',')
+      }
+
+      if (selectedFields) {
+        params.content_type = contentType;
+        params.select = selectedFields;
+      }
+
+      return http.get('/entries', params)
+    });
 
     return Promise.all(requests)
     .then(responses => responses.reduce((acc, res) => {
+      // TODO: Don't prime or prime with field and content info
       prime(res);
       _get(res, ['items'], []).forEach(e => acc[e.sys.id] = e);
       return acc;
     }, {}))
-    .then(byId => ids.map(id => byId[id]));
+    .then(byId => allIds.map(id => byId[id]));
   }
 
   function getOne (id, forcedCtId) {
@@ -79,6 +95,14 @@ function createEntryLoader (http) {
     });
   }
 
+  function getMany(ids, forcedCtId, info) {
+    console.log('get many', ids)
+    const selectedFields = getSelectedFields(info);
+    const idInfoList = ids.map(id => `${id}${selectedFields ? `&&${forcedCtId}&&${selectedFields}` : ''}`)
+    console.log('id info list', idInfoList)
+
+    return loader.loadMany.bind(loader)(idInfoList)
+  }
   function query (ctId, {q = '', skip = 0, limit = DEFAULT_LIMIT} = {}, info) {
     const parsed = qs.parse(q);
     Object.keys(parsed).forEach(key => {

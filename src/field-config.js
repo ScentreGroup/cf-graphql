@@ -35,10 +35,10 @@ module.exports = {
 function createFieldConfig (Type, field, resolveFn) {
   return {
     type: Type,
-    resolve: (entity, _, ctx) => {
+    resolve: (entity, _, ctx, info) => {
       const fieldValue = _get(entity, ['fields', field.id], NOTHING);
       if (fieldValue !== NOTHING) {
-        return resolveFn ? resolveFn(fieldValue, ctx) : fieldValue;
+        return resolveFn ? resolveFn(fieldValue, ctx, info) : fieldValue;
       }
     }
   };

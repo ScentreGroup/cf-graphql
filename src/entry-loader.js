@@ -2,6 +2,7 @@
 
 const _get = require('lodash.get');
 const chunk = require('lodash.chunk');
+const uniq = require('lodash.uniq');
 const qs = require('querystring');
 const DataLoader = require('dataloader');
 const graphqlFields = require('graphql-fields');
@@ -16,6 +17,71 @@ const MAX_FIELDS = 50;
 const IGNORE_FIELDS = ['sys','_backrefs', '__typename'];
 
 module.exports = createEntryLoader;
+
+const mergeSelectedFields = (fields1, fields2) => {
+  if (!fields1 || !fields2) {
+    return null
+  }
+  return uniq(`${fields1},${fields2}`.split(',')).join(',');
+}
+
+const consolidateManyIdsInfo = idsInfo => {
+  console.log('consolidating', idsInfo);
+
+  // Get unique list of entries that we want
+  const entryKeys = idsInfo.reduce((acc, idInfo) => {
+    const [id, contentType, selectedFields] = idInfo.split('&&');
+    const currentInfo = acc[id];
+
+    if (currentInfo) {
+      if (contentType && currentInfo.contentType && currentInfo.contentType !== contentType) {
+        // TODO: This will cause an error anyway throw?
+        console.log('bad content type match', currentInfo.contentType, contentType)
+      }
+      acc[id] = {
+        ...currentInfo,
+        selectedFields: mergeSelectedFields(currentInfo.selectedFields, selectedFields),
+      }
+    } else {
+      acc[id] = {
+        id,
+        contentType,
+        selectedFields: selectedFields || null,
+      };
+    }
+
+    return acc;
+  }, {})
+
+  // Group by contentType and matching field set
+  const matchedData  = Object.keys(entryKeys).reduce((acc, key) => {
+    const { selectedFields, id, contentType } = entryKeys[key]
+    if (!selectedFields) {
+      acc.everything.push(id)
+    } else {
+      const partialKey = `${contentType}&&${selectedFields}`
+      const contentInfo = acc.partial[partialKey]
+      if (contentInfo) {
+        contentInfo.ids.push(id)
+      } else {
+        acc.partial[partialKey] = {
+          ids: [id],
+          contentType,
+          selectedFields,
+        }
+      }
+    }
+    return acc
+  }, {
+    everything: [],
+    partial: {},
+  })
+
+  return {
+    ...matchedData,
+    partial: Object.keys(matchedData.partial).map(key => matchedData.partial[key])
+  };
+}
 
 const getSelectedFields = info => {
   if (!info) {
@@ -51,13 +117,16 @@ function createEntryLoader (http) {
     // we need to chunk IDs and fire multiple requests so we don't produce URLs
     // that are too long (for the server to handle)
     console.log('load', idsInfo)
+    const consolidatedFetchInfo = consolidateManyIdsInfo(idsInfo)
+    console.log('consolidated', consolidatedFetchInfo)
     const contentType = idsInfo[0].split('&&')[1]
     const selectedFields = idsInfo[0].split('&&')[2]
     console.log(selectedFields)
     const allIds = idsInfo.map(idInfo => idInfo.split('&&')[0])
-    const requests = chunk(allIds, CHUNK_SIZE)
+    const everythingRequests = chunk(consolidatedFetchInfo.everything, CHUNK_SIZE)
     .map(ids => {
-      console.log('chunk ids', ids);
+      console.log('everything chunk ids', ids);
+      /*
       const params = {
         limit: CHUNK_SIZE,
         skip: 0,
@@ -69,14 +138,39 @@ function createEntryLoader (http) {
         params.content_type = contentType;
         params.select = selectedFields;
       }
+      */
 
-      return http.get('/entries', params)
+      return http.get('/entries', {
+        limit: CHUNK_SIZE,
+        skip: 0,
+        include: INCLUDE_DEPTH,
+        'sys.id[in]': ids.join(',')
+      })
     });
+    const partialRequests = consolidatedFetchInfo.partial.reduce((acc, partialInfo) => {
+      const requests = chunk(partialInfo.ids, CHUNK_SIZE)
+        .map(ids => {
+          console.log('partial chunk ids', ids, partialInfo.contentType, partialInfo.selectedFields);
+          return http.get('/entries', {
+            limit: CHUNK_SIZE,
+            skip: 0,
+            include: INCLUDE_DEPTH,
+            content_type: partialInfo.contentType,
+            select: partialInfo.selectedFields,
+            'sys.id[in]': ids.join(',')
+          })
+        });
 
-    return Promise.all(requests)
+      return [...acc, ...requests];
+    }, []);
+
+    return Promise.all([...everythingRequests, ...partialRequests])
     .then(responses => responses.reduce((acc, res) => {
       // TODO: Don't prime or prime with field and content info
-      prime(res);
+      if (!selectedFields) {
+        console.log('priming load')
+        // prime(res);
+      }
       _get(res, ['items'], []).forEach(e => acc[e.sys.id] = e);
       return acc;
     }, {}))
@@ -84,6 +178,7 @@ function createEntryLoader (http) {
   }
 
   function getOne (id, forcedCtId) {
+    console.log('getOne', id)
     return loader.load(id)
     .then(res => {
       const ctId = _get(res, ['sys', 'contentType', 'sys', 'id']);
@@ -122,7 +217,14 @@ function createEntryLoader (http) {
     if (selectedFields) {
       params.select = selectedFields;
     }
-    return http.get('/entries', params).then(prime);
+    // TODO: Don't prime if fields
+    return http.get('/entries', params)
+      .then(res => {
+        if (!selectedFields) {
+          prime(res);
+        }
+        return res;
+      });
   }
 
   function queryAll (ctId) {

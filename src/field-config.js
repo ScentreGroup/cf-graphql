@@ -83,10 +83,11 @@ function createEntryFieldConfig (field, ctIdToType) {
 function createArrayOfEntriesFieldConfig (field, ctIdToType) {
   const Type = new GraphQLList(typeFor(field, ctIdToType));
 
-  return createFieldConfig(Type, field, (links, ctx) => {
+  return createFieldConfig(Type, field, (links, ctx, info) => {
     if (Array.isArray(links)) {
       const ids = links.map(getLinkedId).filter(isString);
-      return ctx.entryLoader.getMany(ids).then(coll => coll.filter(isObject));
+      console.log('getMany from field config ++++++++++++++++++++++++++++++++', Type, field.linkedCts[0]);
+      return ctx.entryLoader.getMany(ids, field.linkedCts && field.linkedCts[0], info).then(coll => coll.filter(isObject));
     }
   });
 }

@@ -28,7 +28,7 @@ const getSelectedFields = info => {
     // There is a limit to the number of fields we can select. If too many get everything
     return null;
   }
-  const contentfulFields = topLevelFields.map(fieldKey => `fields.${fieldKey}`).join(',');
+  const contentfulFields = topLevelFields.map(fieldKey => `fields.${fieldKey}`).sort().join(',');
 
   return `sys,${contentfulFields}`;
 };
@@ -97,7 +97,7 @@ function createEntryLoader (http) {
 
   function getMany(ids, forcedCtId, info) {
     console.log('get many', ids)
-    const selectedFields = getSelectedFields(info);
+    const selectedFields = forcedCtId && getSelectedFields(info);
     const idInfoList = ids.map(id => `${id}${selectedFields ? `&&${forcedCtId}&&${selectedFields}` : ''}`)
     console.log('id info list', idInfoList)
 

@@ -158,9 +158,10 @@ function createEntryLoader (http) {
   }
 
   // TODO: Get only required fields here too
-  function getOne (id, forcedCtId) {
-    console.log('getOne', id)
-    return loader.load(id)
+  function getOne (id, forcedCtId, info) {
+    console.log('getOne', id, info && getSelectedFields(info))
+    const selectedFields = forcedCtId && getSelectedFields(info);
+    return loader.load(`${id}${selectedFields ? `&&${forcedCtId}&&${selectedFields}` : ''}`)
     .then(res => {
       const ctId = _get(res, ['sys', 'contentType', 'sys', 'id']);
       if (forcedCtId && ctId !== forcedCtId) {

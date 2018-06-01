@@ -64,7 +64,7 @@ function createQueryFields (spaceGraph) {
     acc[ct.names.field] = {
       type: Type,
       args: {id: {type: IDType}},
-      resolve: (_, args, ctx) => ctx.entryLoader.get(args.id, ct.id)
+      resolve: (_, args, ctx, info) => ctx.entryLoader.get(args.id, ct.id, info)
     };
 
     acc[ct.names.collectionField] = {

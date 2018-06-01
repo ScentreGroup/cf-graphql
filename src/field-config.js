@@ -72,10 +72,11 @@ function getAsset (link, ctx) {
 }
 
 function createEntryFieldConfig (field, ctIdToType) {
-  return createFieldConfig(typeFor(field, ctIdToType), field, (link, ctx) => {
+  return createFieldConfig(typeFor(field, ctIdToType), field, (link, ctx, info) => {
     const linkedId = getLinkedId(link);
     if (isString(linkedId)) {
-      return ctx.entryLoader.get(linkedId, field.linkedCts && field.linkedCts[0]);
+      console.log('getOne from field config!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+      return ctx.entryLoader.get(linkedId, field.linkedCts && field.linkedCts[0], info);
     }
   });
 }

@@ -55,11 +55,11 @@ const consolidateManyIdsInfo = idsInfo => {
 
   // Group by contentType and matching field set
   const matchedData  = Object.keys(entryKeys).reduce((acc, key) => {
-    const { selectedFields, id, contentType } = entryKeys[key]
-    if (!selectedFields) {
+    const { selectedFields: selFields, id, contentType } = entryKeys[key]
+    if (!selFields) {
       acc.everything.push(id)
     } else {
-      const partialKey = `${contentType}&&${selectedFields}`
+      const partialKey = `${contentType}&&${selFields}`
       const contentInfo = acc.partial[partialKey]
       if (contentInfo) {
         contentInfo.ids.push(id)
@@ -67,7 +67,7 @@ const consolidateManyIdsInfo = idsInfo => {
         acc.partial[partialKey] = {
           ids: [id],
           contentType,
-          selectedFields,
+          selectedFields: selFields,
         }
       }
     }
@@ -119,27 +119,9 @@ function createEntryLoader (http) {
     console.log('load', idsInfo)
     const consolidatedFetchInfo = consolidateManyIdsInfo(idsInfo)
     console.log('consolidated', consolidatedFetchInfo)
-    const contentType = idsInfo[0].split('&&')[1]
-    const selectedFields = idsInfo[0].split('&&')[2]
-    console.log(selectedFields)
-    const allIds = idsInfo.map(idInfo => idInfo.split('&&')[0])
+
     const everythingRequests = chunk(consolidatedFetchInfo.everything, CHUNK_SIZE)
     .map(ids => {
-      console.log('everything chunk ids', ids);
-      /*
-      const params = {
-        limit: CHUNK_SIZE,
-        skip: 0,
-        include: INCLUDE_DEPTH,
-        'sys.id[in]': ids.join(',')
-      }
-
-      if (selectedFields) {
-        params.content_type = contentType;
-        params.select = selectedFields;
-      }
-      */
-
       return http.get('/entries', {
         limit: CHUNK_SIZE,
         skip: 0,
@@ -150,7 +132,6 @@ function createEntryLoader (http) {
     const partialRequests = consolidatedFetchInfo.partial.reduce((acc, partialInfo) => {
       const requests = chunk(partialInfo.ids, CHUNK_SIZE)
         .map(ids => {
-          console.log('partial chunk ids', ids, partialInfo.contentType, partialInfo.selectedFields);
           return http.get('/entries', {
             limit: CHUNK_SIZE,
             skip: 0,
@@ -164,19 +145,19 @@ function createEntryLoader (http) {
       return [...acc, ...requests];
     }, []);
 
+    const allIds = idsInfo.map(idInfo => idInfo.split('&&')[0]);
+
     return Promise.all([...everythingRequests, ...partialRequests])
     .then(responses => responses.reduce((acc, res) => {
-      // TODO: Don't prime or prime with field and content info
-      if (!selectedFields) {
-        console.log('priming load')
-        // prime(res);
-      }
+      // TODO: prime with related fields
+      // prime(res);
       _get(res, ['items'], []).forEach(e => acc[e.sys.id] = e);
       return acc;
     }, {}))
     .then(byId => allIds.map(id => byId[id]));
   }
 
+  // TODO: Get only required fields here too
   function getOne (id, forcedCtId) {
     console.log('getOne', id)
     return loader.load(id)
@@ -255,6 +236,8 @@ function createEntryLoader (http) {
   }
 
   function prime (res) {
+    // TODO: loader.prime - use key as sys.id and field information
+    console.log('priming.....', res.length)
     _get(res, ['items'], [])
     .concat(_get(res, ['includes', 'Entry'], []))
     .forEach(e => loader.prime(e.sys.id, e));

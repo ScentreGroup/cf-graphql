@@ -25,9 +25,36 @@ const mergeSelectedFields = (fields1, fields2) => {
   return uniq(`${fields1},${fields2}`.split(',')).join(',');
 }
 
+// TODO: consildate by content types with a union of all the fields
 const consolidateManyIdsInfo = idsInfo => {
   console.log('consolidating', idsInfo);
 
+  const byContentType = idsInfo.reduce((acc, idInfo) => {
+    const [id, contentType, selectedFields] = idInfo.split('&&');
+    const currentContent = acc[contentType]
+
+    if (currentContent) {
+      acc[contentType] = {
+        contentType,
+        selectedFields: mergeSelectedFields(currentContent.selectedFields, selectedFields),
+        ids: uniq([...currentContent.ids, id]),
+      }
+    } else {
+      acc[contentType] = {
+        contentType,
+        ids: [id],
+        selectedFields: selectedFields || null,
+      }
+    }
+
+    return acc
+  }, {});
+  const contentFetches = Object.keys(byContentType).map(key => byContentType[key]);
+  console.log('content fetches', contentFetches);
+
+  return contentFetches;
+
+  /*
   // Get unique list of entries that we want
   const entryKeys = idsInfo.reduce((acc, idInfo) => {
     const [id, contentType, selectedFields] = idInfo.split('&&');
@@ -81,6 +108,7 @@ const consolidateManyIdsInfo = idsInfo => {
     ...matchedData,
     partial: Object.keys(matchedData.partial).map(key => matchedData.partial[key])
   };
+  */
 }
 
 const getSelectedFields = info => {
@@ -120,6 +148,26 @@ function createEntryLoader (http) {
     const consolidatedFetchInfo = consolidateManyIdsInfo(idsInfo)
     console.log('consolidated', consolidatedFetchInfo)
 
+    const requests = consolidatedFetchInfo.reduce((acc, contentInfo) => {
+      const contentRequests = chunk(contentInfo.ids, CHUNK_SIZE)
+        .map(ids => {
+          const params = {
+            limit: CHUNK_SIZE,
+            skip: 0,
+            include: INCLUDE_DEPTH,
+            'sys.id[in]': ids.join(',')
+          };
+          if (contentInfo.selectedFields && contentInfo.contentType) {
+            params.content_type = contentInfo.contentType;
+            params.select = contentInfo.selectedFields;
+          }
+          return http.get('/entries', params)
+        })
+
+      return [...acc, ...contentRequests];
+    }, []);
+
+    /*
     const everythingRequests = chunk(consolidatedFetchInfo.everything, CHUNK_SIZE)
     .map(ids => {
       return http.get('/entries', {
@@ -144,10 +192,11 @@ function createEntryLoader (http) {
 
       return [...acc, ...requests];
     }, []);
+    */
 
     const allIds = idsInfo.map(idInfo => idInfo.split('&&')[0]);
 
-    return Promise.all([...everythingRequests, ...partialRequests])
+    return Promise.all(requests)
     .then(responses => responses.reduce((acc, res) => {
       // TODO: prime with related fields
       // prime(res);

@@ -18,14 +18,25 @@ const IGNORE_FIELDS = ['sys','_backrefs', '__typename'];
 
 module.exports = createEntryLoader;
 
+const keysToContentfulFields = keys => keys.map(fieldKey => `fields.${fieldKey}`).sort().join(',');
+
 const mergeSelectedFields = (fields1, fields2) => {
   if (!fields1 || !fields2) {
     return null
   }
   return uniq(`${fields1},${fields2}`.split(',')).join(',');
-}
+};
 
-// TODO: consildate by content types with a union of all the fields
+const makeCacheKeyFromResponseItem = ({ fields, sys }) => {
+  const contentType = _get(sys, 'contentType.sys.id');
+  let suffix = ''
+  if (contentType) {
+    suffix = `&&${contentType}&&sys,${keysToContentfulFields(Object.keys(fields))}`
+  }
+
+  return `${sys.id}${suffix}`;
+};
+
 const consolidateManyIdsInfo = idsInfo => {
   console.log('consolidating', idsInfo);
 
@@ -53,62 +64,6 @@ const consolidateManyIdsInfo = idsInfo => {
   console.log('content fetches', contentFetches);
 
   return contentFetches;
-
-  /*
-  // Get unique list of entries that we want
-  const entryKeys = idsInfo.reduce((acc, idInfo) => {
-    const [id, contentType, selectedFields] = idInfo.split('&&');
-    const currentInfo = acc[id];
-
-    if (currentInfo) {
-      if (contentType && currentInfo.contentType && currentInfo.contentType !== contentType) {
-        // TODO: This will cause an error anyway throw?
-        console.log('bad content type match', currentInfo.contentType, contentType)
-      }
-      acc[id] = {
-        ...currentInfo,
-        selectedFields: mergeSelectedFields(currentInfo.selectedFields, selectedFields),
-      }
-    } else {
-      acc[id] = {
-        id,
-        contentType,
-        selectedFields: selectedFields || null,
-      };
-    }
-
-    return acc;
-  }, {})
-
-  // Group by contentType and matching field set
-  const matchedData  = Object.keys(entryKeys).reduce((acc, key) => {
-    const { selectedFields: selFields, id, contentType } = entryKeys[key]
-    if (!selFields) {
-      acc.everything.push(id)
-    } else {
-      const partialKey = `${contentType}&&${selFields}`
-      const contentInfo = acc.partial[partialKey]
-      if (contentInfo) {
-        contentInfo.ids.push(id)
-      } else {
-        acc.partial[partialKey] = {
-          ids: [id],
-          contentType,
-          selectedFields: selFields,
-        }
-      }
-    }
-    return acc
-  }, {
-    everything: [],
-    partial: {},
-  })
-
-  return {
-    ...matchedData,
-    partial: Object.keys(matchedData.partial).map(key => matchedData.partial[key])
-  };
-  */
 }
 
 const getSelectedFields = info => {
@@ -122,7 +77,7 @@ const getSelectedFields = info => {
     // There is a limit to the number of fields we can select. If too many get everything
     return null;
   }
-  const contentfulFields = topLevelFields.map(fieldKey => `fields.${fieldKey}`).sort().join(',');
+  const contentfulFields = keysToContentfulFields(topLevelFields)
 
   return `sys,${contentfulFields}`;
 };
@@ -167,39 +122,12 @@ function createEntryLoader (http) {
       return [...acc, ...contentRequests];
     }, []);
 
-    /*
-    const everythingRequests = chunk(consolidatedFetchInfo.everything, CHUNK_SIZE)
-    .map(ids => {
-      return http.get('/entries', {
-        limit: CHUNK_SIZE,
-        skip: 0,
-        include: INCLUDE_DEPTH,
-        'sys.id[in]': ids.join(',')
-      })
-    });
-    const partialRequests = consolidatedFetchInfo.partial.reduce((acc, partialInfo) => {
-      const requests = chunk(partialInfo.ids, CHUNK_SIZE)
-        .map(ids => {
-          return http.get('/entries', {
-            limit: CHUNK_SIZE,
-            skip: 0,
-            include: INCLUDE_DEPTH,
-            content_type: partialInfo.contentType,
-            select: partialInfo.selectedFields,
-            'sys.id[in]': ids.join(',')
-          })
-        });
-
-      return [...acc, ...requests];
-    }, []);
-    */
-
     const allIds = idsInfo.map(idInfo => idInfo.split('&&')[0]);
 
     return Promise.all(requests)
     .then(responses => responses.reduce((acc, res) => {
       // TODO: prime with related fields
-      // prime(res);
+      prime(res);
       _get(res, ['items'], []).forEach(e => acc[e.sys.id] = e);
       return acc;
     }, {}))
@@ -286,12 +214,14 @@ function createEntryLoader (http) {
   }
 
   function prime (res) {
-    // TODO: loader.prime - use key as sys.id and field information
-    console.log('priming.....', res.length)
     _get(res, ['items'], [])
     .concat(_get(res, ['includes', 'Entry'], []))
-    .forEach(e => loader.prime(e.sys.id, e));
+    .forEach(e => {
+      const key = makeCacheKeyFromResponseItem(e)
+      return loader.prime(key, e)
+    });
 
+    // TODO: Ensure assets are ok
     _get(res, ['includes', 'Asset'], [])
     .forEach(a => assets[a.sys.id] = a);
 

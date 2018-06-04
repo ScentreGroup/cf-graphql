@@ -38,8 +38,6 @@ const makeCacheKeyFromResponseItem = ({ fields, sys }) => {
 };
 
 const consolidateManyIdsInfo = idsInfo => {
-  console.log('consolidating', idsInfo);
-
   const byContentType = idsInfo.reduce((acc, idInfo) => {
     const [id, contentType, selectedFields] = idInfo.split('&&');
     const currentContent = acc[contentType]
@@ -61,7 +59,6 @@ const consolidateManyIdsInfo = idsInfo => {
     return acc
   }, {});
   const contentFetches = Object.keys(byContentType).map(key => byContentType[key]);
-  console.log('content fetches', contentFetches);
 
   return contentFetches;
 }
@@ -82,8 +79,91 @@ const getSelectedFields = info => {
   return `sys,${contentfulFields}`;
 };
 
+/*
+function MyCache(iterable = []) {
+  const self = new Map(iterable);
+  return self;
+}
+MyCache.prototype = Object.create(Map.prototype, {
+  get: function(key) {
+    console.log('......................................... my get', key)
+    return Map.prototype.get.call(this, key);
+  },
+  set: function(key, val) {
+    console.log('......................................... my set', key, val)
+    return Map.prototype.get.call(this, key, val);
+  }
+});
+MyCache.prototype.constructor = MyCache;
+*/
+
+// const myMap = new MyCache();
+
+const arrayIsSubset = (subSet, fullSet) => {
+  return subSet.every(val => {
+    return fullSet.includes(val)
+  })
+}
+const matchCacheKey = inputKey => cacheKey => {
+  console.log('matching key', inputKey, cacheKey);
+
+  if (inputKey === cacheKey) {
+    return true;
+  }
+
+  const [inputId, inContentType, inFields] = inputKey.split('&&');
+  const [cacheId, cacheContentType, cacheFields] = cacheKey.split('&&');
+  if (inputId === cacheId && inContentType === cacheContentType && inFields && cacheFields) {
+    // Check if fields in input are a setup of fields in cache
+    const inFieldsSplit = inFields.split(',');
+    const cacheFieldsSplit = cacheFields.split(',')
+
+    return arrayIsSubset(inFieldsSplit, cacheFieldsSplit);
+  }
+
+  return false;
+}
+
+function MyCache() {
+  const _map = new Map();
+  console.log('created map in my cache');
+
+  function myGet(key) {
+    console.log('......................................... my get', key);
+    const keyArray = Array.from(_map.keys());
+    console.log('current keys', keyArray);
+    const foundKey = keyArray.find(matchCacheKey(key));
+    if (foundKey) {
+      console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! found key', foundKey);
+    }
+
+    return _map.get(foundKey || key);
+  }
+
+  // TODO: mySet, override/reuse cache key if adding more fields
+  return {
+    get: myGet,
+    set: function(key, val) {
+      return _map.set(key, val);
+    },
+    delete: function(key) {
+      return _map.delete(key);
+    },
+    clear: function() {
+      return _map.clear();
+    }
+  };
+};
+
 function createEntryLoader (http) {
-  const loader = new DataLoader(load);
+  // TODO: Want map for cacheMap that checks if cached entity has the required fields or just cache on id???
+  const loader = new DataLoader(load, {
+    cacheKeyFn: key => {
+      console.log('cache key fn', key)
+      return key;
+    },
+    cacheMap: MyCache(),
+  });
   const assets = {};
 
   return {
@@ -99,7 +179,7 @@ function createEntryLoader (http) {
   function load (idsInfo) {
     // we need to chunk IDs and fire multiple requests so we don't produce URLs
     // that are too long (for the server to handle)
-    console.log('load', idsInfo)
+    console.log('*********************************** load', idsInfo)
     const consolidatedFetchInfo = consolidateManyIdsInfo(idsInfo)
     console.log('consolidated', consolidatedFetchInfo)
 
@@ -176,12 +256,11 @@ function createEntryLoader (http) {
     if (selectedFields) {
       params.select = selectedFields;
     }
-    // TODO: Don't prime if fields
+    console.log('query for', ctId, q)
     return http.get('/entries', params)
       .then(res => {
-        if (!selectedFields) {
-          prime(res);
-        }
+        prime(res);
+
         return res;
       });
   }
@@ -194,6 +273,7 @@ function createEntryLoader (http) {
       content_type: ctId
     });
 
+    console.log('query all')
     return http.get('/entries', paramsFor(0))
     .then(firstResponse => {
       const length = Math.ceil(firstResponse.total/MAX_LIMIT)-1;
@@ -217,7 +297,9 @@ function createEntryLoader (http) {
     _get(res, ['items'], [])
     .concat(_get(res, ['includes', 'Entry'], []))
     .forEach(e => {
+      // TODO: If field is null is is not in list of fields so doesn't get included in cache key and then we miss case on other requests
       const key = makeCacheKeyFromResponseItem(e)
+      console.log('priming', key)
       return loader.prime(key, e)
     });
 

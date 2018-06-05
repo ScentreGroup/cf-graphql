@@ -64,7 +64,7 @@ function createQueryFields (spaceGraph) {
     acc[ct.names.field] = {
       type: Type,
       args: {id: {type: IDType}},
-      resolve: (_, args, ctx) => ctx.entryLoader.get(args.id, ct.id)
+      resolve: (_, args, ctx, info) => ctx.entryLoader.get(args.id, ct.id, info)
     };
 
     acc[ct.names.collectionField] = {
@@ -78,7 +78,7 @@ function createQueryFields (spaceGraph) {
       resolve: (_, args, ctx, info) => {
         const {ids} = args;
         if (ids) {
-          return ctx.entryLoader.getMany(ids, info)
+          return ctx.entryLoader.getMany(ids, ct.id, info)
           .then(objs => objs.filter(obj => obj && obj.sys.contentType.sys.id === ct.id))
         } else {
           return ctx.entryLoader.query(ct.id, args, info);

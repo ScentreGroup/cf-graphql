@@ -72,10 +72,10 @@ function getAsset (link, ctx) {
 }
 
 function createEntryFieldConfig (field, ctIdToType) {
-  return createFieldConfig(typeFor(field, ctIdToType), field, (link, ctx) => {
+  return createFieldConfig(typeFor(field, ctIdToType), field, (link, ctx, info) => {
     const linkedId = getLinkedId(link);
     if (isString(linkedId)) {
-      return ctx.entryLoader.get(linkedId, field.linkedCts && field.linkedCts[0]);
+      return ctx.entryLoader.get(linkedId, field.linkedCts && field.linkedCts[0], info);
     }
   });
 }
@@ -83,10 +83,10 @@ function createEntryFieldConfig (field, ctIdToType) {
 function createArrayOfEntriesFieldConfig (field, ctIdToType) {
   const Type = new GraphQLList(typeFor(field, ctIdToType));
 
-  return createFieldConfig(Type, field, (links, ctx) => {
+  return createFieldConfig(Type, field, (links, ctx, info) => {
     if (Array.isArray(links)) {
       const ids = links.map(getLinkedId).filter(isString);
-      return ctx.entryLoader.getMany(ids).then(coll => coll.filter(isObject));
+      return ctx.entryLoader.getMany(ids, field.linkedCts && field.linkedCts[0], info).then(coll => coll.filter(isObject));
     }
   });
 }

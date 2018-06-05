@@ -65,63 +65,6 @@ test('entry-loader: querying entries', function (t) {
   });
 });
 
-test('entry-loader: querying entries with resolve Info', function (t) {
-  t.plan(3);
-  const {httpStub, loader} = prepare();
-  const resolveInfo = {
-    fieldNodes: [{
-      selectionSet: {
-        selections: [
-          { name: { value: 'title' } },
-          { name: { value: 'slug' } },
-        ]
-      }
-    }],
-  };
-  loader.query('ctid', {q: 'fields.someNum=123&fields.test[exists]=true'}, resolveInfo)
-  .then(res => {
-    t.deepEqual(res, ITEMS);
-    t.equal(httpStub.get.callCount, 1);
-    t.deepEqual(httpStub.get.lastCall.args, ['/entries', {
-      skip: 0,
-      limit: 50,
-      include: 1,
-      content_type: 'ctid',
-      'fields.someNum': '123',
-      'fields.test[exists]': 'true',
-      select: 'sys,fields.title,fields.slug',
-    }]);
-  });
-});
-
-test('entry-loader: querying entries with only sys field requested', function (t) {
-  t.plan(3);
-  const {httpStub, loader} = prepare();
-  const resolveInfo = {
-    fieldNodes: [{
-      selectionSet: {
-        selections: [
-          { name: { value: 'sys' } },
-          { name: { value: '__typename' } },
-        ]
-      }
-    }],
-  };
-  loader.query('ctid', {q: 'fields.someNum=123&fields.test[exists]=true'}, resolveInfo)
-  .then(res => {
-    t.deepEqual(res, ITEMS);
-    t.equal(httpStub.get.callCount, 1);
-    t.deepEqual(httpStub.get.lastCall.args, ['/entries', {
-      skip: 0,
-      limit: 50,
-      include: 1,
-      content_type: 'ctid',
-      'fields.someNum': '123',
-      'fields.test[exists]': 'true',
-    }]);
-  });
-});
-
 test('entry-loader: counting entries', function (t) {
   t.plan(3);
   const {httpStub, loader} = prepare();

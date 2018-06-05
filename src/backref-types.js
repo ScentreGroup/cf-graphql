@@ -30,18 +30,15 @@ function createBackrefFieldConfig (backref, Type) {
       skip: {type: GraphQLInt},
       limit: {type: GraphQLInt},
     },
-    resolve: (entryId, args, ctx, info) => {
+    resolve: (entryId, args, ctx) => {
       let q = `fields.${backref.fieldId}.sys.id[in]=${entryId}`;
       if (args.q) q = q + `&${args.q}`;
 
-      return ctx.entryLoader.query(
-        backref.ctId, {
-          q,
-          skip: args.skip,
-          limit: args.limit,
-        },
-        info
-      );
+      return ctx.entryLoader.query(backref.ctId, {
+        q,
+        skip: args.skip,
+        limit: args.limit,
+      })
     }
   };
 }

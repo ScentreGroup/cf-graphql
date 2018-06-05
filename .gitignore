@@ -2,7 +2,3 @@
 /coverage
 /dump
 /dev/config.json
-.idea
-yarn.lock
-package-lock.json
-.DS_store

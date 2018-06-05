@@ -8,7 +8,6 @@ const {
   GraphQLSchema,
   GraphQLObjectType
 } = require('graphql');
-const graphqlFields = require('graphql-fields');
 
 const {
   createSchema,
@@ -70,13 +69,11 @@ test('schema: querying generated schema', function (t) {
     .then(res => [entryLoader, res]);
   };
 
-  t.plan(30);
+  t.plan(22);
 
   testQuery('{ posts { title } }', {query: sinon.stub().resolves([post])})
   .then(([entryLoader, res]) => {
-    t.deepEqual(entryLoader.query.firstCall.args[0], 'postct');
-    t.deepEqual(entryLoader.query.firstCall.args[1], {});
-    t.deepEqual(graphqlFields(entryLoader.query.firstCall.args[2]), { title: {} });
+    t.deepEqual(entryLoader.query.firstCall.args, ['postct', {}]);
     t.equal(res.errors, undefined);
     t.deepEqual(res.data.posts, [{title: 'Hello world'}]);
   });
@@ -85,12 +82,10 @@ test('schema: querying generated schema', function (t) {
     '{ categories(skip: 2, limit: 3, q: "fields.name=test") { name } }',
     {query: sinon.stub().resolves([category])}
   ).then(([entryLoader, res]) => {
-    t.deepEqual(entryLoader.query.firstCall.args[0], 'catct');
     t.deepEqual(
-      entryLoader.query.firstCall.args[1],
-      {skip: 2, limit: 3, q: 'fields.name=test'}
+      entryLoader.query.firstCall.args,
+      ['catct', {skip: 2, limit: 3, q: 'fields.name=test'}]
     );
-    t.deepEqual(graphqlFields(entryLoader.query.firstCall.args[2]), { name: {} });
     t.equal(res.errors, undefined);
     t.deepEqual(res.data.categories, [{name: 'test'}]);
   });
@@ -110,9 +105,7 @@ test('schema: querying generated schema', function (t) {
     '{ posts { title } category(id: "c1") { name } }',
     {query: sinon.stub().resolves([post]), get: sinon.stub().resolves(category)}
   ).then(([entryLoader, res]) => {
-    t.deepEqual(entryLoader.query.firstCall.args[0], 'postct');
-    t.deepEqual(entryLoader.query.firstCall.args[1], {});
-    t.deepEqual(graphqlFields(entryLoader.query.firstCall.args[2]), { title: {} });
+    t.deepEqual(entryLoader.query.firstCall.args, ['postct', {}]);
     t.deepEqual(entryLoader.get.firstCall.args, ['c1', 'catct']);
     t.equal(res.errors, undefined);
     t.deepEqual(res.data, {posts: [{title: 'Hello world'}], category: {name: 'test'}});
@@ -123,18 +116,7 @@ test('schema: querying generated schema', function (t) {
     {query: sinon.stub().onCall(0).resolves([category]).onCall(1).resolves([post])}
   ).then(([entryLoader, res]) => {
     t.equal(res.errors, undefined);
-    t.deepEqual(entryLoader.query.firstCall.args[0], 'catct');
-    t.deepEqual(entryLoader.query.firstCall.args[1], {});
-    t.deepEqual(
-      graphqlFields(entryLoader.query.firstCall.args[2]),
-      {
-        _backrefs: {
-          posts__via__category: {
-            title: {},
-          },
-        },
-      }
-    );
+    t.deepEqual(entryLoader.query.firstCall.args, ['catct', {}]);
     t.deepEqual(entryLoader.query.lastCall.args[0], 'postct');
     t.deepEqual(res.data, {categories: [{_backrefs: {posts__via__category: [{title: 'Hello world'}]}}]});
   });

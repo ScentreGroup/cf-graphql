@@ -24,14 +24,31 @@ const mergeSelectedFields = (fields1, fields2) => {
   if (!fields1 || !fields2) {
     return null
   }
-  return uniq(`${fields1},${fields2}`.split(',')).join(',');
+  return uniq(`${fields1},${fields2}`.split(',')).sort().join(',');
 };
 
-const makeCacheKeyFromResponseItem = ({ fields, sys }) => {
+const getRequestedFields = (contextData, id) => {
+  if (typeof contextData === 'string') {
+    return contextData;
+  }
+  // Get matching fields for the id
+  return contextData.reduce((acc, data) => {
+    const [sysId, contentType, fields] = data.split('&&')
+
+    if (sysId === id) {
+      acc = fields;
+    }
+  }, null);
+}
+const makeCacheKeyFromResponseItem = ({ fields, sys }, contextData) => {
+  // Combine fields requested and fields available
+  const receivedFields = keysToContentfulFields(Object.keys(fields));
+  const requestedFields = getRequestedFields(contextData, sys.id);
+  const allFields = mergeSelectedFields(receivedFields, requestedFields);
   const contentType = _get(sys, 'contentType.sys.id');
   let suffix = ''
   if (contentType) {
-    suffix = `&&${contentType}&&sys,${keysToContentfulFields(Object.keys(fields))}`
+    suffix = `&&${contentType}&&sys,${allFields}`;
   }
 
   return `${sys.id}${suffix}`;
@@ -206,8 +223,8 @@ function createEntryLoader (http) {
 
     return Promise.all(requests)
     .then(responses => responses.reduce((acc, res) => {
-      // TODO: prime with related fields
-      prime(res);
+      // TODO: prime with requested fields as empty fields not returned
+      prime(res, idsInfo);
       _get(res, ['items'], []).forEach(e => acc[e.sys.id] = e);
       return acc;
     }, {}))
@@ -259,7 +276,8 @@ function createEntryLoader (http) {
     console.log('query for', ctId, q)
     return http.get('/entries', params)
       .then(res => {
-        prime(res);
+        // TODO: Prime with selected fields
+        prime(res, selectedFields);
 
         return res;
       });
@@ -282,6 +300,7 @@ function createEntryLoader (http) {
       return Promise.all([Promise.resolve(firstResponse)].concat(requests));
     })
     .then(responses => responses.reduce((acc, res) => {
+      // TODO: Prime with selected fields?
       prime(res);
       return res.items.reduce((acc, item) => {
         if (!acc.some(e => e.sys.id === item.sys.id)) {
@@ -293,12 +312,12 @@ function createEntryLoader (http) {
     }, []));
   }
 
-  function prime (res) {
+  function prime (res, contextData) {
     _get(res, ['items'], [])
     .concat(_get(res, ['includes', 'Entry'], []))
     .forEach(e => {
       // TODO: If field is null is is not in list of fields so doesn't get included in cache key and then we miss case on other requests
-      const key = makeCacheKeyFromResponseItem(e)
+      const key = makeCacheKeyFromResponseItem(e, contextData)
       console.log('priming', key)
       return loader.prime(key, e)
     });

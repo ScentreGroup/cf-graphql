@@ -96,34 +96,13 @@ const getSelectedFields = info => {
   return `sys,${contentfulFields}`;
 };
 
-/*
-function MyCache(iterable = []) {
-  const self = new Map(iterable);
-  return self;
-}
-MyCache.prototype = Object.create(Map.prototype, {
-  get: function(key) {
-    console.log('......................................... my get', key)
-    return Map.prototype.get.call(this, key);
-  },
-  set: function(key, val) {
-    console.log('......................................... my set', key, val)
-    return Map.prototype.get.call(this, key, val);
-  }
-});
-MyCache.prototype.constructor = MyCache;
-*/
-
-// const myMap = new MyCache();
-
 const arrayIsSubset = (subSet, fullSet) => {
   return subSet.every(val => {
     return fullSet.includes(val)
   })
 }
-const matchCacheKey = inputKey => cacheKey => {
-  console.log('matching key', inputKey, cacheKey);
 
+const matchCacheKey = inputKey => cacheKey => {
   if (inputKey === cacheKey) {
     return true;
   }
@@ -143,24 +122,18 @@ const matchCacheKey = inputKey => cacheKey => {
 
 function MyCache() {
   const _map = new Map();
-  console.log('created map in my cache');
 
   function myGet(key) {
-    console.log('......................................... my get', key);
     const keyArray = Array.from(_map.keys());
-    console.log('current keys', keyArray);
     const foundKey = keyArray.find(matchCacheKey(key));
-    if (foundKey) {
-      console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! found key', foundKey);
-    }
 
     return _map.get(foundKey || key);
   }
 
-  // TODO: mySet, override/reuse cache key if adding more fields
   return {
     get: myGet,
     set: function(key, val) {
+      // TODO: mySet, remove old subset cache key if adding more fields
       return _map.set(key, val);
     },
     delete: function(key) {
@@ -173,12 +146,7 @@ function MyCache() {
 };
 
 function createEntryLoader (http) {
-  // TODO: Want map for cacheMap that checks if cached entity has the required fields or just cache on id???
   const loader = new DataLoader(load, {
-    cacheKeyFn: key => {
-      console.log('cache key fn', key)
-      return key;
-    },
     cacheMap: MyCache(),
   });
   const assets = {};
@@ -196,9 +164,7 @@ function createEntryLoader (http) {
   function load (idsInfo) {
     // we need to chunk IDs and fire multiple requests so we don't produce URLs
     // that are too long (for the server to handle)
-    console.log('*********************************** load', idsInfo)
     const consolidatedFetchInfo = consolidateManyIdsInfo(idsInfo)
-    console.log('consolidated', consolidatedFetchInfo)
 
     const requests = consolidatedFetchInfo.reduce((acc, contentInfo) => {
       const contentRequests = chunk(contentInfo.ids, CHUNK_SIZE)
@@ -223,7 +189,7 @@ function createEntryLoader (http) {
 
     return Promise.all(requests)
     .then(responses => responses.reduce((acc, res) => {
-      // TODO: prime with requested fields as empty fields not returned
+      // prime with requested fields as empty fields not returned
       prime(res, idsInfo);
       _get(res, ['items'], []).forEach(e => acc[e.sys.id] = e);
       return acc;
@@ -231,9 +197,7 @@ function createEntryLoader (http) {
     .then(byId => allIds.map(id => byId[id]));
   }
 
-  // TODO: Get only required fields here too
   function getOne (id, forcedCtId, info) {
-    console.log('getOne', id, info && getSelectedFields(info))
     const selectedFields = forcedCtId && getSelectedFields(info);
     return loader.load(`${id}${selectedFields ? `&&${forcedCtId}&&${selectedFields}` : ''}`)
     .then(res => {
@@ -247,10 +211,8 @@ function createEntryLoader (http) {
   }
 
   function getMany(ids, forcedCtId, info) {
-    console.log('get many', ids)
     const selectedFields = forcedCtId && getSelectedFields(info);
     const idInfoList = ids.map(id => `${id}${selectedFields ? `&&${forcedCtId}&&${selectedFields}` : ''}`)
-    console.log('id info list', idInfoList)
 
     return loader.loadMany.bind(loader)(idInfoList)
   }
@@ -273,14 +235,8 @@ function createEntryLoader (http) {
     if (selectedFields) {
       params.select = selectedFields;
     }
-    console.log('query for', ctId, q)
     return http.get('/entries', params)
-      .then(res => {
-        // TODO: Prime with selected fields
-        prime(res, selectedFields);
-
-        return res;
-      });
+      .then(res => prime(res, selectedFields));
   }
 
   function queryAll (ctId) {
@@ -291,7 +247,7 @@ function createEntryLoader (http) {
       content_type: ctId
     });
 
-    console.log('query all')
+    // TODO: Get selected fields only here
     return http.get('/entries', paramsFor(0))
     .then(firstResponse => {
       const length = Math.ceil(firstResponse.total/MAX_LIMIT)-1;
@@ -316,13 +272,11 @@ function createEntryLoader (http) {
     _get(res, ['items'], [])
     .concat(_get(res, ['includes', 'Entry'], []))
     .forEach(e => {
-      // TODO: If field is null is is not in list of fields so doesn't get included in cache key and then we miss case on other requests
       const key = makeCacheKeyFromResponseItem(e, contextData)
-      console.log('priming', key)
       return loader.prime(key, e)
     });
 
-    // TODO: Ensure assets are ok
+    // TODO: Ensure assets are ok with selected fields
     _get(res, ['includes', 'Asset'], [])
     .forEach(a => assets[a.sys.id] = a);
 

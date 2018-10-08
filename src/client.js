@@ -26,6 +26,7 @@ function createClient (config) {
 function createContentfulClient (api, config) {
   const protocol = config.secure !== false ? 'https' : 'http';
   const domain = config.domain || 'contentful.com';
+  const environmentId = config.environmentId || 'master';
 
   const token = {
     [CDA]: config.cdaToken,
@@ -39,7 +40,7 @@ function createContentfulClient (api, config) {
   }
 
   return createHttpClient({
-    base: `${protocol}://${api}.${domain}/spaces/${config.spaceId}`,
+    base: `${protocol}://${api}.${domain}/spaces/${config.spaceId}/environments/${environmentId}`,
     headers: {Authorization: `Bearer ${token}`},
     defaultParams
   });

@@ -24,6 +24,24 @@ function createClient (config) {
   };
 }
 
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+function fetchWithRateLimit(fetcher) {
+  return fetcher().then((response) => {
+    if (response.status === 429) {
+      const secondsToWait = response.headers.get('X-Contentful-RateLimit-Reset')
+      const sleepForMs = parseInt(secondsToWait) * 1000
+
+      console.log(JSON.stringify({ message: `cf-graphql: Hit rate limit, sleeping for ${sleepForMs}ms` }))
+      return sleep(sleepForMs).then(() => fetchWithRateLimit(fetcher))
+    } else {
+      return response
+    }
+  })
+}
+
 function get (url, params, opts) {
   const paramsWithDefaults = Object.assign({}, opts.defaultParams, params);
   const sortedQS = getSortedQS(paramsWithDefaults);
@@ -44,10 +62,8 @@ function get (url, params, opts) {
     ? new HttpProxyAgent(process.env.http_proxy)
     : null
 
-  cache[url] = fetch(
-    base + url,
-    {headers: Object.assign({}, getUserAgent(), headers), agent}
-  )
+  const fetchOptions = {headers: Object.assign({}, getUserAgent(), headers), agent}
+  cache[url] = fetchWithRateLimit(() => fetch(base + url, fetchOptions))
   .then(checkStatus)
   .then(res => {
     httpCall.duration = Date.now()-httpCall.start;

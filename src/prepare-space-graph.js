@@ -26,7 +26,8 @@ const SIMPLE_FIELD_TYPE_MAPPING = {
   Date: 'String',
   Boolean: 'Bool',
   Location: 'Location',
-  Object: 'Object'
+  Object: 'Object',
+  RichText: 'Object',
 };
 
 module.exports = prepareSpaceGraph;

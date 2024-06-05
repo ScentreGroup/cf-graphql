@@ -68,7 +68,6 @@
     "graphql": "^0.13.0",
     "graphqlviz": "^2.0.1",
     "istanbul": "^0.4.5",
-    "just-extend": "1.1.22",
     "mkdirp": "^0.5.1",
     "nodemon": "^1.12.1",
     "proxyquire": "^1.8.0",

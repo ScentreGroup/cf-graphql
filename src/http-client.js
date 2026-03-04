@@ -31,7 +31,7 @@ function sleep(milliseconds) {
 function fetchWithRateLimit(fetcher) {
   return fetcher().then((response) => {
     if (response.status === 429) {
-      const secondsToWait = response.headers.get('X-Contentful-RateLimit-Reset')
+      const secondsToWait = response.headers.get('X-Contentful-RateLimit-Reset').split(',')[0];
       const sleepForMs = parseInt(secondsToWait) * 1000
 
       console.log(JSON.stringify({ message: `cf-graphql: Hit rate limit, sleeping for ${sleepForMs}ms` }))
